@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gun Bottle Shoot Game</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
+        body { background: linear-gradient(to bottom, #1e3c72, #2a5298); display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; color: white; }
+        canvas { display: block; position: absolute; top: 0; left: 0; }
+        .stats { position: absolute; top: 10px; left: 10px; background: rgba(0, 0, 0, 0.7); padding: 10px; border-radius: 5px; }
+        .stats p { margin: 5px 0; }
+        .game-over { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #000; padding: 20px; color: white; border-radius: 10px; text-align: center; display: none; }
+        .game-over button { margin-top: 10px; padding: 10px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="stats">
+        <p>Bullets Fired: <span id="bulletCount">0</span></p>
+        <p>Bottles Destroyed: <span id="blastCount">0</span></p>
+        <p>Total Bottles: <span id="totalBottles">0</span></p>
+    </div>
+
+    <div class="game-over" id="gameOverScreen">
+        <h2>Game Over!</h2>
+        <p>Your Score: <span id="finalScore"></span></p>
+        <button onclick="restartGame()">Restart</button>
+    </div>
+
+    <audio id="shootSound" src="gunshot-sound-178803.mp3"></audio>
+    <audio id="blastSound" src="glass-breaking-93803.mp3"></audio>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let gameRunning = true;
+
+        const gun = {
+            x: 200, y: canvas.height / 2 - 50, width: 150, height: 90, image: new Image()
+        };
+        gun.image.src = "gun.png"; 
+
+        const bullets = [];
+        const bottles = [];
+        let bulletCount = 0;
+        let blastCount = 0;
+        let totalBottles = 0;
+        const maxBullets = 10;
+
+        const shootSound = document.getElementById("shootSound");
+        const blastSound = document.getElementById("blastSound");
+
+        class Bullet {
+            constructor(x, y) { this.x = x; this.y = y; this.radius = 5; this.speed = 12; }
+            move() { this.x += this.speed; }
+            draw() {
+                ctx.fillStyle = "red";
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        class Bottle {
+            constructor() {
+                this.x = canvas.width - 200;
+                this.y = -50;
+                this.width = 70; // Increased width
+                this.height = 120;
+                this.speed = 3;
+                this.image = new Image();
+                this.image.src = "bottle.png"; 
+                this.exploding = false;
+                this.frame = 0;
+            }
+
+            move() { this.y += this.speed; }
+
+            draw() {
+                if (this.exploding) {
+                    ctx.fillStyle = "orange";
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.width / 2, this.y + this.height / 2, this.frame * 8, 0, Math.PI * 2);
+                    ctx.fill();
+                    this.frame++;
+                    if (this.frame > 6) this.remove = true;
+                } else {
+                    ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
+                }
+            }
+        }
+
+        function spawnBottle() {
+            if (gameRunning) {
+                bottles.push(new Bottle());
+                totalBottles++;
+                document.getElementById("totalBottles").innerText = totalBottles;
+            }
+        }
+
+        function shootBullet() {
+            if (bulletCount < maxBullets && gameRunning) {
+                bullets.push(new Bullet(gun.x + 120, gun.y + 40));
+                bulletCount++;
+                document.getElementById("bulletCount").innerText = bulletCount;
+                shootSound.currentTime = 0;
+                shootSound.play().catch(error => console.log("Audio play blocked:", error));
+            }
+
+            if (bulletCount >= maxBullets) {
+                setTimeout(showGameOver, 1000);
+            }
+        }
+
+        canvas.addEventListener("click", () => {
+            shootBullet();
+        });
+
+        function detectCollision(bullet, bottle) {
+            return bullet.x + bullet.radius > bottle.x &&
+                   bullet.y > bottle.y &&
+                   bullet.y < bottle.y + bottle.height;
+        }
+
+        function showGameOver() {
+            gameRunning = false;
+            document.getElementById("finalScore").innerText = blastCount;
+            document.getElementById("gameOverScreen").style.display = "block";
+        }
+
+        function restartGame() {
+            gameRunning = true;
+            bulletCount = 0;
+            blastCount = 0;
+            totalBottles = 0;
+            bullets.length = 0;
+            bottles.length = 0;
+            document.getElementById("bulletCount").innerText = bulletCount;
+            document.getElementById("blastCount").innerText = blastCount;
+            document.getElementById("totalBottles").innerText = totalBottles;
+            document.getElementById("gameOverScreen").style.display = "none";
+        }
+
+        function updateGame() {
+            if (!gameRunning) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(gun.image, gun.x, gun.y, gun.width, gun.height);
+
+            bullets.forEach((bullet, index) => {
+                bullet.move();
+                bullet.draw();
+                if (bullet.x > canvas.width) bullets.splice(index, 1);
+            });
+
+            bottles.forEach((bottle, index) => {
+                bottle.move();
+                bottle.draw();
+                if (bottle.y > canvas.height) bottles.splice(index, 1);
+
+                bullets.forEach((bullet, bIndex) => {
+                    if (detectCollision(bullet, bottle)) {
+                        bottle.exploding = true;
+                        bullets.splice(bIndex, 1);
+                        blastCount++;
+                        document.getElementById("blastCount").innerText = blastCount;
+                        blastSound.currentTime = 0;
+                        blastSound.play().catch(error => console.log("Audio play blocked:", error));
+                    }
+                });
+
+                if (bottle.remove) bottles.splice(index, 1);
+            });
+
+            requestAnimationFrame(updateGame);
+        }
+
+        setInterval(spawnBottle, 1500);
+        updateGame();
+    </script>
+
+</body>
+</html>
